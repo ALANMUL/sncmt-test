@@ -1,0 +1,19 @@
+# Optional: a local Postgres on your PC (instead of Supabase) for development.
+# Start:  docker compose up -d
+# Then in backend/.env set BOTH lines to:
+#   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/sncmt"
+#   DIRECT_URL="postgresql://postgres:postgres@localhost:5432/sncmt"
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sncmt
+    ports:
+      - "5432:5432"
+    volumes:
+      - sncmt_pg:/var/lib/postgresql/data
+volumes:
+  sncmt_pg:

@@ -1,0 +1,12 @@
+// Tables are created by the SQL files in prisma/migrations (run: npm run migrate).
+// NEVER use `prisma db push`. After a migration you may run `npm run prisma:sync`
+// to refresh this file from the live database.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
