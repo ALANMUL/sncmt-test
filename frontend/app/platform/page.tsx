@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api, Me } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface SchoolRow {
   id: string; name: string; subdomain: string; email: string; logo_url: string | null;
@@ -14,6 +15,9 @@ export default function PlatformPage() {
   const router = useRouter();
   const qc = useQueryClient();
   const [tab, setTab] = useState<'pending' | 'active'>('pending');
+  const [target, setTarget] = useState<SchoolRow | null>(null);
+  const [typed, setTyped] = useState('');
+
   const me = useQuery({ queryKey: ['me'], queryFn: () => api<Me>('/auth/me'), retry: false });
   useEffect(() => {
     if (me.isError || (me.data && !me.data.isPlatformAdmin)) router.replace('/platform/login');
@@ -25,8 +29,23 @@ export default function PlatformPage() {
     mutationFn: (id: string) => api(`/platform/schools/${id}/approve`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['schools'] }),
   });
+  const remove = useMutation({
+    mutationFn: (s: SchoolRow) => api(`/platform/schools/${s.id}?confirm=${encodeURIComponent(s.subdomain)}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      setTarget(null);
+      qc.invalidateQueries({ queryKey: ['schools'] });
+    },
+  });
   const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'sncmt.com';
 
+  function openDelete(s: SchoolRow) {
+    setTyped('');
+    remove.reset();
+    setTarget(s);
+  }
+  function closeDelete() {
+    if (!remove.isPending) setTarget(null);
+  }
   async function logout() {
     await api('/auth/logout', { method: 'POST' });
     router.replace('/platform/login');
@@ -66,12 +85,49 @@ export default function PlatformPage() {
               <p className="mt-1 text-sm text-ink/70">Admin: {s.admin_name ?? 'unknown'} ({s.admin_email ?? 'no email'})</p>
               <p className="text-xs text-ink/50">Registered {new Date(s.created_at).toLocaleDateString()}</p>
             </div>
-            {!s.is_active && (
-              <Button onClick={() => approve.mutate(s.id)} disabled={approve.isPending}>Approve school</Button>
-            )}
+            <div className="ml-auto flex items-center gap-2">
+              {!s.is_active && (
+                <Button onClick={() => approve.mutate(s.id)} disabled={approve.isPending}>Approve school</Button>
+              )}
+              <Button variant="danger" onClick={() => openDelete(s)}>Delete</Button>
+            </div>
           </div>
         ))}
       </div>
+
+      {target && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true"
+          aria-labelledby="delete-title" onKeyDown={(e) => e.key === 'Escape' && closeDelete()}>
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h2 id="delete-title" className="font-display text-xl font-semibold text-flag">Delete this school?</h2>
+            <p className="mt-3 text-sm leading-relaxed">
+              You are about to permanently delete <b>{target.name}</b> (<span className="font-mono">{target.subdomain}.{root}</span>).
+            </p>
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-ink/80">
+              <li>All its users, students, teachers, classes, exams and results are removed.</li>
+              <li>Its web address stops working.</li>
+              <li>This cannot be undone.</li>
+            </ul>
+            <p className="mt-3 text-sm text-ink/70">A school with fee or payment records cannot be deleted, because money history is kept permanently.</p>
+
+            <label className="mt-5 block text-sm font-medium">
+              Type <span className="font-mono">{target.subdomain}</span> to confirm
+              <Input className="mt-1.5" autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+            </label>
+
+            {remove.isError && <p role="alert" className="mt-3 rounded-md bg-flag/10 px-3 py-2 text-sm text-flag">{(remove.error as Error).message}</p>}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <Button variant="outline" onClick={closeDelete} disabled={remove.isPending}>Cancel</Button>
+              <Button className="bg-flag hover:bg-flag/90"
+                disabled={typed.trim().toLowerCase() !== target.subdomain.toLowerCase() || remove.isPending}
+                onClick={() => remove.mutate(target)}>
+                {remove.isPending ? 'Deleting…' : 'Delete school'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
